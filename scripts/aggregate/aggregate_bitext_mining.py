@@ -22,7 +22,21 @@ if __name__ == "__main__":
 
     datasets = ["bucc","nollysenti","nusax","nusatranslation","tatoeba","lince_mt", "phinc"]
     metrics = ["f1","f1","f1","f1","f1","f1","f1"]
-    models = ["sentence-transformers/LaBSE", "sentence-transformers/use-cmlm-multilingual", "intfloat/multilingual-e5-base", "intfloat/multilingual-e5-large", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2", "microsoft/Multilingual-MiniLM-L12-H384", "cis-lmu/glot500-base", "FacebookAI/xlm-roberta-base", "FacebookAI/xlm-roberta-large", "embed-multilingual-v3.0", "text-embedding-3-large","LaBSE__multilingual-e5-large__weights0.25_0.75", "LaBSE__multilingual-e5-large__embed-multilingual-v3.0__weights1.0_2.0_3.0"]
+    models = [
+        "Lusifer"
+        # "sentence-transformers/LaBSE", 
+        # "sentence-transformers/use-cmlm-multilingual", 
+        # "intfloat/multilingual-e5-base", 
+        # "intfloat/multilingual-e5-large", 
+        # "sentence-transformers/paraphrase-multilingual-mpnet-base-v2", 
+        # "microsoft/Multilingual-MiniLM-L12-H384", "cis-lmu/glot500-base", 
+        # "FacebookAI/xlm-roberta-base", 
+        # "FacebookAI/xlm-roberta-large", 
+        # "embed-multilingual-v3.0", 
+        # "text-embedding-3-large",
+        # "LaBSE__multilingual-e5-large__weights0.25_0.75", 
+        # "LaBSE__multilingual-e5-large__embed-multilingual-v3.0__weights1.0_2.0_3.0"
+        ]
     total_langs = [4, 4, 11, 11, 112, 1, 1]
     tasks = ["mono","mono","mono","mono","mono","cs","cs"]
     all_tasks = ["mono","cs"]
@@ -44,7 +58,7 @@ if __name__ == "__main__":
             task = tasks[i]
             if task not in all_nums_per_task:
                 all_nums_per_task[task] = []
-            output_dir = "logs/save" + "/" + dataset + "/" + model_name + "/seed_42/"
+            output_dir = "outputs/save_bitext" + "/" + dataset + "/" + model_name + "/seed_42/"
             
             try:
                 files_list = os.listdir(output_dir)

@@ -1,4 +1,5 @@
 import os
+import math
 import torch
 import random
 import numpy as np
@@ -6,6 +7,10 @@ import argparse
 import json
 import cohere
 from openai import OpenAI
+
+from src.models.lusifer import WrappedLusifer
+from transformers import HfArgumentParser
+from src.args import DataArguments, ModelArguments, TrainingArguments
 
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
@@ -43,10 +48,7 @@ def evaluate_classification(train_embeddings, test_embeddings, train_labels, k):
         if len(train_embeddings) < batch_size:
             batch_size = len(test_embeddings) // 2
         
-        num_of_batches = len(train_embeddings) // batch_size
-
-        if (len(train_embeddings) % batch_size) > 0:
-            num_of_batches += 1
+        num_of_batches = math.ceil(len(train_embeddings) / batch_size)
 
         for i in range(num_of_batches):
             train_embedding = torch.FloatTensor(train_embeddings[i*batch_size:(i+1)*batch_size]).unsqueeze(1).cuda()
@@ -74,10 +76,12 @@ def evaluate_classification(train_embeddings, test_embeddings, train_labels, k):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--model_name_or_path", type=str, required=True, help="Path to the model"
+    )
+    parser.add_argument(
         "--model_checkpoint",
         default=None,
         type=str,
-        required=True,
         help="Path to pre-trained model")
     parser.add_argument("--cross", action="store_true")
     parser.add_argument("--src_lang", type=str, default="x", help="source language")
@@ -95,7 +99,7 @@ if __name__ == "__main__":
     print("###########################")
     print("src_lang:", args.src_lang)
     print("dataset:", args.dataset)
-    print("model_checkpoint:", args.model_checkpoint)
+    print("model_name_or_path:", args.model_name_or_path)
     print("seed:", args.seed)
     print("cuda:", args.cuda)
     print("cross:", args.cross)
@@ -111,36 +115,100 @@ if __name__ == "__main__":
     else:
         output_dir = "outputs/save_classification"
 
-    if "embed-multilingual" in args.model_checkpoint:
+    if args.dataset == "nusax":
+        prompt = 'Classify the sentiment expressed in the given text.'
+        dataset = NusaXDataset(prompt=args.prompt, task="classification")
+    if args.dataset == "lince_sa":
+        prompt = 'Classify the sentiment expressed in the given text.'
+        dataset = LinceSADataset(prompt=args.prompt)
+    if args.dataset == "massive_intent":
+        prompt = 'Given a user utterance as query, find the user intents.'
+        dataset = MassiveIntentDataset(prompt=args.prompt)
+    if args.dataset == "sib200":
+        prompt = 'Identify the category of the following passages.'
+        dataset = Sib200Dataset(prompt=args.prompt)
+    if args.dataset == "nollysenti":
+        prompt = 'Classify the sentiment expressed in the given text.'
+        dataset = NollySentiDataset(prompt=args.prompt, task="classification")
+    if args.dataset == "mtop_intent":
+        prompt = 'Classify the intent of the given utterance in task-oriented conversation.'
+        dataset = MTOPIntentDataset(prompt=args.prompt)
+    if args.dataset == "fire":
+        prompt = 'Classify the sentiment expressed in the given text.'
+        dataset = FIREDataset(prompt=args.prompt)
+    
+    is_complete = True
+    if args.model_checkpoint is not None:
+        model_name = "Lusifer"
+    else:
+        model_name = args.model_name_or_path
+    for lang in dataset.LANGS:
+        if args.cross and lang == args.src_lang:
+            print("skip src language eval", lang)
+            continue
+        
+        # Check if embeddings are already computed
+        if os.path.exists(f"{output_dir}/{args.dataset}/{model_name}/seed_{args.seed}/eval_{lang}_1.json"):
+            print("skip", lang)
+            continue
+        else:
+            is_complete = False
+            break
+    if is_complete:
+        print("All languages are already evaluated")
+        exit(0)
+
+    is_lusifer = False
+    if args.model_checkpoint is not None:
+        is_lusifer = True
+        args.prompt = ''
+        config_file = args.model_name_or_path
+        args.model_name_or_path = "Lusifer"
+        model_checkpoint = args.model_checkpoint
+        hf_parser = HfArgumentParser((DataArguments, ModelArguments, TrainingArguments))
+        print(f"Loading yaml config {config_file}")
+        data_args, model_args, training_args = hf_parser.parse_yaml_file(yaml_file=config_file)
+        model = WrappedLusifer(
+            universal_learner_name_or_path=model_args.universal_learner_name_or_path,
+            encoder_name_or_path=model_args.encoder_name_or_path,
+            universal_learner_backbone_type=model_args.universal_learner_backbone_type,
+            encoder_backbone_type=model_args.encoder_backbone_type,
+            is_freeze_universal_learner=model_args.is_freeze_universal_learner,
+            is_freeze_encoder=True,
+            connection_type=model_args.connection_type,
+            num_added_tokens=model_args.num_added_tokens,
+            encoder_lora_name=model_args.encoder_lora_name,
+            universal_learner_lora_name=model_args.universal_learner_lora_name,
+            loar_r=model_args.loar_r,
+            lora_alpha=model_args.lora_alpha,
+            dropout=model_args.dropout,
+            attn_implementation=model_args.attn_implementation,
+            model_dtype= torch.bfloat16,
+            model_revision=training_args.model_revision,
+            model_checkpoint=model_checkpoint,
+            num_gpus=8,
+        )
+        batch_size = 512
+    elif "embed-multilingual" in args.model_name_or_path:
         model = cohere.Client(COHERE_TOKEN)
         batch_size = 64
-    elif "text-embedding-3-large" in args.model_checkpoint:
+    elif "text-embedding-3-large" in args.model_name_or_path:
         model = OpenAI(api_key=OPENAI_TOKEN)
         batch_size = 64
     else:
-        model = SentenceTransformer(args.model_checkpoint).cuda()
+        model = SentenceTransformer(args.model_name_or_path).cuda()
         batch_size = 128
-
-    if args.dataset == "nusax":
-        dataset = NusaXDataset(prompt=args.prompt, task="classification")
-    if args.dataset == "lince_sa":
-        dataset = LinceSADataset(prompt=args.prompt)
-    if args.dataset == "massive_intent":
-        dataset = MassiveIntentDataset(prompt=args.prompt)
-    if args.dataset == "sib200":
-        dataset = Sib200Dataset(prompt=args.prompt)
-    if args.dataset == "nollysenti":
-        dataset = NollySentiDataset(prompt=args.prompt, task="classification")
-    if args.dataset == "mtop_intent":
-        dataset = MTOPIntentDataset(prompt=args.prompt)
-    if args.dataset == "fire":
-        dataset = FIREDataset(prompt=args.prompt)
 
     for lang in dataset.LANGS:
         if args.cross and lang == args.src_lang:
             print("skip src language eval", lang)
             continue
-            
+        
+        # Check if embeddings are already computed
+        if os.path.exists(f"{output_dir}/{args.dataset}/{args.model_name_or_path}/seed_{args.seed}/eval_{lang}_1.json"):
+            print("skip", lang)
+            continue
+
         # get embeddings
         if args.cross:
             train_texts = dataset.train_data[args.src_lang]["source"]
@@ -151,10 +219,7 @@ if __name__ == "__main__":
 
         if len(train_texts) < batch_size:
             batch_size = len(train_texts) // 2
-        num_of_batches = len(train_texts) // batch_size
-
-        if (len(train_texts) % batch_size) > 0:
-            num_of_batches += 1
+        num_of_batches = math.ceil(len(train_texts) / batch_size)
 
         if args.cross:
             print("> train:", args.src_lang, num_of_batches)
@@ -165,10 +230,12 @@ if __name__ == "__main__":
             train_batch_text = train_texts[i*batch_size:(i+1)*batch_size]
             train_batch_label = train_labels[i*batch_size:(i+1)*batch_size]
 
-            if "embed-multilingual" in args.model_checkpoint:
-                train_batch_embeddings = get_cohere_embedding(model, train_batch_text, args.model_checkpoint)
-            elif "text-embedding-3-large" in args.model_checkpoint:
-                train_batch_embeddings = get_openai_embedding(model, train_batch_text, args.model_checkpoint)
+            if is_lusifer:
+                train_batch_embeddings = model.encode_queries(train_batch_text, instruction=prompt)
+            elif "embed-multilingual" in args.model_name_or_path:
+                train_batch_embeddings = get_cohere_embedding(model, train_batch_text, args.model_name_or_path)
+            elif "text-embedding-3-large" in args.model_name_or_path:
+                train_batch_embeddings = get_openai_embedding(model, train_batch_text, args.model_name_or_path)
             else:
                 train_batch_embeddings = model.encode(train_batch_text, normalize_embeddings=False)
 
@@ -184,10 +251,7 @@ if __name__ == "__main__":
 
         if len(test_texts) < batch_size:
             batch_size = len(test_texts) // 2
-        num_of_batches = len(test_texts) // batch_size
-
-        if (len(test_texts) % batch_size) > 0:
-            num_of_batches += 1
+        num_of_batches = math.ceil(len(test_texts) / batch_size)
             
         print("> test:", lang, num_of_batches)
         test_embeddings = []
@@ -195,10 +259,12 @@ if __name__ == "__main__":
             test_batch_text = test_texts[i*batch_size:(i+1)*batch_size]
             test_batch_label = test_labels[i*batch_size:(i+1)*batch_size]
 
-            if "embed-multilingual" in args.model_checkpoint:
-                test_batch_embeddings = get_cohere_embedding(model, test_batch_text, args.model_checkpoint)
-            elif "text-embedding-3-large" in args.model_checkpoint:
-                test_batch_embeddings = get_openai_embedding(model, test_batch_text, args.model_checkpoint)
+            if is_lusifer:
+                test_batch_embeddings = model.encode_queries(test_batch_text, instruction=prompt)
+            elif "embed-multilingual" in args.model_name_or_path:
+                test_batch_embeddings = get_cohere_embedding(model, test_batch_text, args.model_name_or_path)
+            elif "text-embedding-3-large" in args.model_name_or_path:
+                test_batch_embeddings = get_openai_embedding(model, test_batch_text, args.model_name_or_path)
             else:
                 test_batch_embeddings = model.encode(test_batch_text, normalize_embeddings=False)
 
@@ -208,8 +274,8 @@ if __name__ == "__main__":
                 for emb in test_batch_embeddings:
                     test_embeddings = np.concatenate((test_embeddings, np.expand_dims(emb, axis=0)), axis=0)
 
-        if not os.path.exists(f"{output_dir}/{args.dataset}/{args.model_checkpoint}/seed_{args.seed}/"):
-            os.makedirs(f"{output_dir}/{args.dataset}/{args.model_checkpoint}/seed_{args.seed}/")
+        if not os.path.exists(f"{output_dir}/{args.dataset}/{args.model_name_or_path}/seed_{args.seed}/"):
+            os.makedirs(f"{output_dir}/{args.dataset}/{args.model_name_or_path}/seed_{args.seed}/")
 
         for k in [1,5,10]:
             key = lang
@@ -224,7 +290,7 @@ if __name__ == "__main__":
             obj[f'f1'] = f1_score(test_labels, hyps, average="macro")
             print(obj)
 
-            file_path = output_dir + "/" + args.dataset + "/" + args.model_checkpoint + "/" + "/seed_" + str(args.seed) + "/eval_" + key + "_" + str(k) + ".json"
+            file_path = output_dir + "/" + args.dataset + "/" + args.model_name_or_path + "/" + "/seed_" + str(args.seed) + "/eval_" + key + "_" + str(k) + ".json"
             print("writing results to file_path:", file_path)
             with open(file_path, "w") as outfile: 
                 json.dump(obj, outfile, indent=4)

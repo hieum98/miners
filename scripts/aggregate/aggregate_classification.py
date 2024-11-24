@@ -21,8 +21,22 @@ if __name__ == "__main__":
     print("###########################")
 
     datasets = ["massive_intent","nollysenti","nusax","sib200","fire","lince_sa"]
+    models = [
+        "Lusifer"
+        # "sentence-transformers/LaBSE", 
+        # "sentence-transformers/use-cmlm-multilingual", 
+        # "intfloat/multilingual-e5-base", 
+        # "intfloat/multilingual-e5-large", 
+        # "sentence-transformers/paraphrase-multilingual-mpnet-base-v2", 
+        # "microsoft/Multilingual-MiniLM-L12-H384", "cis-lmu/glot500-base", 
+        # "FacebookAI/xlm-roberta-base", 
+        # "FacebookAI/xlm-roberta-large", 
+        # "embed-multilingual-v3.0", 
+        # "text-embedding-3-large",
+        # "LaBSE__multilingual-e5-large__weights0.25_0.75", 
+        # "LaBSE__multilingual-e5-large__embed-multilingual-v3.0__weights1.0_2.0_3.0"
+        ]
     metrics = ["acc","acc","f1","acc","acc","acc"]
-    models = ["sentence-transformers/LaBSE", "sentence-transformers/use-cmlm-multilingual", "intfloat/multilingual-e5-base", "intfloat/multilingual-e5-large", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2", "microsoft/Multilingual-MiniLM-L12-H384", "cis-lmu/glot500-base", "FacebookAI/xlm-roberta-base", "FacebookAI/xlm-roberta-large", "embed-multilingual-v3.0", "text-embedding-3-large","LaBSE__multilingual-e5-large__weights0.25_0.75", "LaBSE__multilingual-e5-large__embed-multilingual-v3.0__weights1.0_2.0_3.0"]
     total_langs = [51, 5, 12, 205, 2, 1]
     tasks = ["mono","mono","mono","mono","cs","cs"]
     all_tasks = ["mono","cs"]
@@ -44,7 +58,7 @@ if __name__ == "__main__":
             if task not in all_nums_per_task:
                 all_nums_per_task[task] = []
             dataset = datasets[i]
-            output_dir = "logs/save_classification" + "/" + dataset + "/" + model_name + "/seed_42/"
+            output_dir = "outputs/save_classification" + "/" + dataset + "/" + model_name + "/seed_42/"
             
             try:
                 files_list = os.listdir(output_dir)
