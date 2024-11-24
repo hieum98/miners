@@ -1,5 +1,4 @@
 MODEL_NAME_OR_PATH=princeton-nlp/sup-simcse-roberta-large
-CUDA_VISIBLE_DEVICES=$1
 
 python bitext.py --src_lang eng --dataset lince_mt --seed 42 --cuda --model_name_or_path $MODEL_NAME_OR_PATH
 python bitext.py --src_lang eng --dataset nusax --seed 42 --cuda --model_name_or_path $MODEL_NAME_OR_PATH 
